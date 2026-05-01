@@ -202,3 +202,132 @@ def get_expense_stats(user_id: str) -> dict:
         "non_recurring_avg": round(monthly["non_recurring_total"].mean(), 2),
         "months": len(monthly),
     }
+
+
+# ──────────────────────────────────────────────
+# Schema-Aligned Loaders (Account, Counterparty, Asset)
+# ──────────────────────────────────────────────
+
+def load_accounts() -> pd.DataFrame:
+    """Load accounts dataset — maps to schema's Account entity."""
+    df = pd.read_csv(_resolve_path("accounts.csv"))
+    return df
+
+
+def load_assets() -> pd.DataFrame:
+    """Load assets dataset — maps to schema's Asset entity."""
+    df = pd.read_csv(_resolve_path("assets.csv"))
+    return df
+
+
+def load_counterparties() -> pd.DataFrame:
+    """Load counterparties dataset — maps to schema's Counterparty entity."""
+    df = pd.read_csv(_resolve_path("counterparties.csv"))
+    return df
+
+
+# ──────────────────────────────────────────────
+# Schema-Aware Context Builders
+# ──────────────────────────────────────────────
+
+def get_debt_info(user_id: str) -> dict:
+    """Get debt summary matching schema's FinancialFlow + Installment entities."""
+    debts = get_user_debts(user_id)
+    if debts.empty:
+        return {"total_debt": 0, "num_debts": 0, "debts": [], "monthly_obligations": 0}
+
+    total = debts["remaining_amount"].sum()
+    monthly = debts["monthly_payment"].sum()
+    debt_list = []
+    for _, d in debts.iterrows():
+        debt_list.append({
+            "name": d["debt_name"],
+            "remaining": round(d["remaining_amount"], 2),
+            "interest_rate": d["interest_rate"],
+            "monthly_payment": round(d["monthly_payment"], 2),
+            "due_date": str(d["due_date"].date()) if hasattr(d["due_date"], "date") else str(d["due_date"]),
+            "priority": d["priority"],
+        })
+    return {
+        "total_debt": round(total, 2),
+        "num_debts": len(debts),
+        "debts": debt_list,
+        "monthly_obligations": round(monthly, 2),
+    }
+
+
+def get_savings_info(user_id: str) -> dict:
+    """Get savings goals summary — maps to schema's saving_goal FinancialFlowCategory."""
+    savings = get_user_savings(user_id)
+    if savings.empty:
+        return {"num_goals": 0, "total_target": 0, "total_saved": 0, "goals": [], "overall_progress_pct": 0}
+
+    total_target = savings["target_amount"].sum()
+    total_saved = savings["saved_amount"].sum()
+    overall_pct = round(total_saved / total_target * 100, 1) if total_target > 0 else 0
+
+    goals = []
+    for _, g in savings.iterrows():
+        progress = round(g["saved_amount"] / g["target_amount"] * 100, 1) if g["target_amount"] > 0 else 0
+        remaining = g["target_amount"] - g["saved_amount"]
+        months_left = max(1, (g["deadline"] - pd.Timestamp.now()).days / 30)
+        required_monthly = remaining / months_left if months_left > 0 else remaining
+
+        goals.append({
+            "name": g["goal_name"],
+            "target": round(g["target_amount"], 2),
+            "saved": round(g["saved_amount"], 2),
+            "progress_pct": progress,
+            "monthly_contribution": round(g["monthly_contribution"], 2),
+            "required_monthly": round(required_monthly, 2),
+            "on_track": g["monthly_contribution"] >= required_monthly * 0.9,
+            "deadline": g["deadline"].strftime("%Y-%m-%d"),
+        })
+
+    return {
+        "num_goals": len(savings),
+        "total_target": round(total_target, 2),
+        "total_saved": round(total_saved, 2),
+        "goals": goals,
+        "overall_progress_pct": overall_pct,
+    }
+
+
+def get_account_summary(user_id: str) -> dict:
+    """Summarize account balances — maps to schema's Account entity."""
+    try:
+        accounts = load_accounts()
+    except FileNotFoundError:
+        return {"total_balance": 0, "num_accounts": 0, "by_category": {}, "accounts": []}
+
+    user_accounts = accounts[accounts["user_id"] == user_id]
+    if user_accounts.empty:
+        return {"total_balance": 0, "num_accounts": 0, "by_category": {}, "accounts": []}
+
+    total = user_accounts["current_balance"].sum()
+
+    # Group by category
+    by_category = {}
+    for cat, group in user_accounts.groupby("category"):
+        by_category[cat] = {
+            "count": len(group),
+            "total_balance": round(group["current_balance"].sum(), 2),
+        }
+
+    account_list = []
+    for _, acc in user_accounts.iterrows():
+        account_list.append({
+            "label": acc["label"],
+            "institution": acc.get("institution", ""),
+            "category": acc["category"],
+            "balance": round(acc["current_balance"], 2),
+            "currency": acc.get("currency", "EGP"),
+            "status": acc.get("status", "active"),
+        })
+
+    return {
+        "total_balance": round(total, 2),
+        "num_accounts": len(user_accounts),
+        "by_category": by_category,
+        "accounts": account_list,
+    }
