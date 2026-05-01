@@ -109,6 +109,8 @@ def forecast_income(user_id: str, months_ahead: int = 3) -> dict:
     X_lstm = X_scaled.reshape((X_scaled.shape[0], 1, X_scaled.shape[1]))
     
     # Define and train Global LSTM
+    tf.random.set_seed(42)
+    np.random.seed(42)
     model = Sequential([
         LSTM(64, activation='relu', input_shape=(1, X_lstm.shape[2])),
         Dropout(0.2),
@@ -214,6 +216,8 @@ def evaluate_forecast(user_id: str) -> dict:
     X_train_lstm = X_train.reshape((X_train.shape[0], 1, X_train.shape[1]))
     X_test_lstm = X_test.reshape((X_test.shape[0], 1, X_test.shape[1]))
     
+    tf.random.set_seed(42)
+    np.random.seed(42)
     model = Sequential([
         LSTM(64, activation='relu', input_shape=(1, X_train_lstm.shape[2])),
         Dropout(0.2),

@@ -31,9 +31,15 @@ def _get_financial_context():
     
     if income_df.empty or expenses_df.empty:
         return {}
-        
-    avg_income = income_df.groupby('user_id')['amount'].sum() / 12
-    avg_expenses = expenses_df.groupby('user_id')['amount'].sum() / 12
+
+    # Use actual month count per user instead of hardcoded 12
+    income_months = income_df.groupby('user_id')['month'].nunique()
+    avg_income = income_df.groupby('user_id')['amount'].sum() / income_months
+
+    expenses_df['month'] = pd.to_datetime(expenses_df['expense_date']).dt.to_period('M')
+    expense_months = expenses_df.groupby('user_id')['month'].nunique()
+    avg_expenses = expenses_df.groupby('user_id')['amount'].sum() / expense_months
+
     surplus = (avg_income - avg_expenses).to_dict()
     return surplus
 
@@ -66,6 +72,7 @@ def score_debts_ml(user_id: str) -> pd.DataFrame:
         risk -= (row['monthly_surplus'] / 1000)
         return np.clip(risk + np.random.normal(0, 2), 0, 100)
 
+    np.random.seed(42)
     train_data['target_risk'] = train_data.apply(synthesize_risk, axis=1)
     
     features = ['interest_rate', 'days_until_due', 'remaining_ratio', 'monthly_surplus', 'priority']
@@ -137,7 +144,7 @@ def prioritize_debts(user_id: str, strategy: str = "hybrid", monthly_budget: flo
                 interest = balances[i] * rates[i]
                 balances[i] += interest
                 month_interest += interest
-                p = min(balances[i], mins[i])
+                p = min(balances[i], mins[i], max(0, rem_budget))
                 balances[i] -= p
                 rem_budget -= p
                 total_paid += p

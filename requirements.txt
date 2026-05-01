@@ -7,8 +7,8 @@ numpy>=1.24.0
 matplotlib
 seaborn
 
-# Feature 1: Income Forecasting
-# (Switched to RandomForest from scikit-learn & Moving Average)
+# Feature 1: Income Forecasting (Global LSTM)
+tensorflow>=2.15.0
 
 # Feature 3: Debt Prioritization (payment planner)
 python-dateutil>=2.8.0
