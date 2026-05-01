@@ -1,4 +1,4 @@
-# WellFinanced AI Engine 🧠💰
+# WellFinanced AI Engine 
 
 <div align="center">
   <p><strong>The intelligent backend powering autonomous financial management for freelancers.</strong></p>
